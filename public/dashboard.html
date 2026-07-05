@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgileCert | Dashboard</title>
+    
+    <!-- Fonts & Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        .error-message {
+            color: red;
+            margin-top: 10px;
+            min-height: 20px;
+        }
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Spinner -->
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="dashboard">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <i class="fas fa-certificate"></i>
+                <span>AgileCert</span>
+            </div>
+            <nav>
+                <ul>
+                    <li class="active"><a href="#"><i class="fas fa-home"></i> Dashboard</a></li>
+                    <li><a href="#"><i class="fas fa-book-open"></i> Courses</a></li>
+                    <li><a href="#"><i class="fas fa-calendar-alt"></i> Exams</a></li>
+                    <li><a href="#"><i class="fas fa-user"></i> Profile</a></li>
+                    <li><a href="#"><i class="fas fa-cog"></i> Settings</a></li>
+                    <li><a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                </ul>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Bar -->
+            <header>
+                <h1>Dashboard</h1>
+                <div class="user-profile" id="userProfile">
+                    <img src="https://via.placeholder.com/40" alt="User" id="userAvatar">
+                    <span id="userName">Loading...</span>
+                </div>
+            </header>
+
+            <!-- Stats Cards -->
+            <div class="stats-cards">
+                <div class="card">
+                    <div class="card-icon blue">
+                        <i class="fas fa-certificate"></i>
+                    </div>
+                    <div class="card-info">
+                        <h3>Certifications</h3>
+                        <p id="certCount">Loading...</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-icon green">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="card-info">
+                        <h3>Exams Passed</h3>
+                        <p id="passedExams">Loading...</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-icon orange">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="card-info">
+                        <h3>Upcoming Exams</h3>
+                        <p id="upcomingExams">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Tracker -->
+            <div class="progress-section">
+                <h2>Your Progress</h2>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="overallProgress" style="width: 0%;"></div>
+                </div>
+                <div class="progress-courses" id="courseProgress">
+                    <div class="loading-message">Loading your progress...</div>
+                </div>
+            </div>
+
+            <!-- Upcoming Exams -->
+            <div class="upcoming-exams">
+                <h2>Upcoming Exams</h2>
+                <div class="exam-list" id="examList">
+                    <div class="loading-message">Loading upcoming exams...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase & App Scripts -->
+    <script>
+        // Initialize Firebase with your configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCJhX9uherRPFY5RlU60OzEpebjwEQti4Q",
+            authDomain: "agilecert-9696d.firebaseapp.com",
+            projectId: "agilecert-9696d",
+            storageBucket: "agilecert-9696d.firebasestorage.app",
+            messagingSenderId: "419532973750",
+            appId: "1:419532973750:web:90905e3f96b59dc95f2817",
+            measurementId: "G-R0JL25VGL2"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        // Show loading spinner
+        document.getElementById('loadingSpinner').style.display = 'flex';
+        
+        // Auth state listener
+        auth.onAuthStateChanged((user) => {
+            if (!user) {
+                // User not logged in, redirect to index with a flag
+                window.location.href = 'index.html?redirected=true';
+            } else {
+                // User is logged in, load dashboard content
+                loadUserData(user);
+                document.getElementById('loadingSpinner').style.display = 'none';
+                
+                // Update user profile in Firestore if needed
+                updateUserLastLogin(user.uid);
+            }
+        });
+        
+        // Update user's last login time
+        function updateUserLastLogin(userId) {
+            db.collection("users").doc(userId).set({
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true })
+            .catch((error) => {
+                console.error("Error updating last login: ", error);
+            });
+        }
+        
+        // Logout functionality
+        document.getElementById('logoutBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('loadingSpinner').style.display = 'flex';
+            auth.signOut().then(() => {
+                window.location.href = 'index.html?logout=true';
+            }).catch((error) => {
+                console.error('Logout error:', error);
+                document.getElementById('loadingSpinner').style.display = 'none';
+                alert('Logout failed. Please try again.');
+            });
+        });
+        
+        // Load user data from Firestore
+        function loadUserData(user) {
+            // Set basic user info
+            const userNameElement = document.getElementById('userName');
+            userNameElement.textContent = user.displayName || user.email || 'User';
+            
+            // Set user avatar if available
+            if (user.photoURL) {
+                document.getElementById('userAvatar').src = user.photoURL;
+            }
+            
+            // Load user data from Firestore
+            db.collection("users").doc(user.uid).get()
+                .then((doc) => {
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        
+                        // Update certifications count
+                        const certCount = userData.certifications?.length || 0;
+                        document.getElementById('certCount').textContent = `${certCount}/5 Completed`;
+                        
+                        // Update passed exams
+                        const passedExams = userData.passedExams || 0;
+                        document.getElementById('passedExams').textContent = passedExams;
+                        
+                        // Update upcoming exams
+                        const upcomingExams = userData.upcomingExams?.length || 0;
+                        document.getElementById('upcomingExams').textContent = `${upcomingExams} Scheduled`;
+                        
+                        // Update overall progress
+                        const overallProgress = userData.overallProgress || 0;
+                        document.getElementById('overallProgress').style.width = `${overallProgress}%`;
+                        
+                        // Load course progress
+                        if (userData.courses) {
+                            let courseProgressHTML = '';
+                            userData.courses.forEach(course => {
+                                courseProgressHTML += `
+                                    <div class="course">
+                                        <span>${course.name}</span>
+                                        <div class="course-progress" style="width: ${course.progress}%;"></div>
+                                    </div>
+                                `;
+                            });
+                            document.getElementById('courseProgress').innerHTML = courseProgressHTML;
+                        }
+                        
+                        // Load upcoming exams
+                        if (userData.upcomingExams) {
+                            let examListHTML = '';
+                            userData.upcomingExams.forEach(exam => {
+                                const examDate = exam.date.toDate().toLocaleDateString();
+                                examListHTML += `
+                                    <div class="exam">
+                                        <i class="fas fa-book-open"></i>
+                                        <div class="exam-details">
+                                            <h3>${exam.name}</h3>
+                                            <p>${examDate} | ${exam.time}</p>
+                                        </div>
+                                        <button class="btn">View Details</button>
+                                    </div>
+                                `;
+                            });
+                            document.getElementById('examList').innerHTML = examListHTML;
+                        }
+                    } else {
+                        // No user data found, initialize with defaults
+                        initializeUserData(user.uid);
+                        loadUserData(user); // Retry after initialization
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error loading user data:", error);
+                    // Fallback to default values if Firestore fails
+                    document.getElementById('certCount').textContent = '0/5 Completed';
+                    document.getElementById('passedExams').textContent = '0';
+                    document.getElementById('upcomingExams').textContent = '0 Scheduled';
+                    document.getElementById('overallProgress').style.width = '0%';
+                });
+        }
+        
+        // Initialize user data if doesn't exist
+        function initializeUserData(userId) {
+            db.collection("users").doc(userId).set({
+                certifications: [],
+                passedExams: 0,
+                upcomingExams: [],
+                overallProgress: 0,
+                courses: [
+                    { name: "Scrum Master", progress: 0 },
+                    { name: "Agile Leadership", progress: 0 }
+                ],
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+    </script>
+</body>
+</html>
